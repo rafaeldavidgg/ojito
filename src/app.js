@@ -4,25 +4,26 @@ const { register, login, logout, requireAuth } = require('./auth');
 const { newId, normalizeUrl, detectStore } = require('./utils');
 const { fetchPreview } = require('./preview');
 
-function canAccess(db, userId, listId) {
-  return !!db.prepare('SELECT 1 FROM memberships WHERE list_id = ? AND user_id = ?').get(listId, userId);
+async function canAccess(db, userId, listId) {
+  const row = await db.prepare('SELECT 1 FROM memberships WHERE list_id = ? AND user_id = ?').get(listId, userId);
+  return !!row;
 }
 
-function touchList(db, listId) {
-  db.prepare("UPDATE lists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(listId);
+async function touchList(db, listId) {
+  await db.prepare("UPDATE lists SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(listId);
 }
 
 function enrichAsync(db, ojitoId, url) {
   // no bloquea la respuesta: se ejecuta en background y prerrellena si puede
-  fetchPreview(url).then((p) => {
+  fetchPreview(url).then(async (p) => {
     try {
       if (p.ok && (p.title || p.image_url)) {
-        const cur = db.prepare('SELECT title, image_url FROM ojitos WHERE id = ?').get(ojitoId);
+        const cur = await db.prepare('SELECT title, image_url FROM ojitos WHERE id = ?').get(ojitoId);
         if (!cur) return;
-        db.prepare('UPDATE ojitos SET title = COALESCE(NULLIF(title,\'\'), ?), image_url = COALESCE(image_url, ?), preview_status = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\') WHERE id = ?')
+        await db.prepare('UPDATE ojitos SET title = COALESCE(NULLIF(title,\'\'), ?), image_url = COALESCE(image_url, ?), preview_status = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\') WHERE id = ?')
           .run(p.title || null, p.image_url || null, 'ok', ojitoId);
       } else {
-        db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ? AND preview_status = 'pending'").run(ojitoId);
+        await db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ? AND preview_status = 'pending'").run(ojitoId);
       }
     } catch {
       // best-effort: ignorar
@@ -37,26 +38,26 @@ function createApp(db) {
   const auth = (req, res, next) => requireAuth(db, req, res, next);
 
   // ---- auth ----
-  app.post('/api/register', (req, res) => {
+  app.post('/api/register', async (req, res) => {
     try {
-      const user = register(db, req.body.email, req.body.password);
-      const session = login(db, req.body.email, req.body.password);
+      const user = await register(db, req.body.email, req.body.password);
+      const session = await login(db, req.body.email, req.body.password);
       res.status(201).json(session);
     } catch (e) {
       res.status(e.status || 400).json({ error: e.message });
     }
   });
 
-  app.post('/api/login', (req, res) => {
+  app.post('/api/login', async (req, res) => {
     try {
-      res.json(login(db, req.body.email, req.body.password));
+      res.json(await login(db, req.body.email, req.body.password));
     } catch (e) {
       res.status(e.status || 400).json({ error: e.message });
     }
   });
 
-  app.post('/api/logout', auth, (req, res) => {
-    logout(db, req.user.token);
+  app.post('/api/logout', auth, async (req, res) => {
+    await logout(db, req.user.token);
     res.json({ ok: true });
   });
 
@@ -65,9 +66,9 @@ function createApp(db) {
   });
 
   // ---- listas ----
-  app.get('/api/lists', auth, (req, res) => {
+  app.get('/api/lists', auth, async (req, res) => {
     const includeArchived = req.query.archived === '1';
-    const rows = db.prepare(`
+    const rows = await db.prepare(`
       SELECT l.*, (SELECT COUNT(*) FROM ojitos o WHERE o.list_id = l.id) AS ojito_count
       FROM lists l JOIN memberships m ON m.list_id = l.id
       WHERE m.user_id = ? ${includeArchived ? '' : 'AND l.archived_at IS NULL'}
@@ -76,26 +77,26 @@ function createApp(db) {
     res.json(rows);
   });
 
-  app.post('/api/lists', auth, (req, res) => {
+  app.post('/api/lists', auth, async (req, res) => {
     const title = String(req.body.title || '').trim();
     if (!title) return res.status(400).json({ error: 'El nombre es obligatorio' });
     if (title.length > 80) return res.status(400).json({ error: 'Nombre demasiado largo (max 80)' });
     const id = newId('list');
-    db.prepare("INSERT INTO lists (id, title, visibility, created_by) VALUES (?, ?, 'private', ?)").run(id, title, req.user.id);
-    db.prepare("INSERT INTO memberships (list_id, user_id, role) VALUES (?, ?, 'owner')").run(id, req.user.id);
-    res.status(201).json(db.prepare('SELECT * FROM lists WHERE id = ?').get(id));
+    await db.prepare("INSERT INTO lists (id, title, visibility, created_by) VALUES (?, ?, 'private', ?)").run(id, title, req.user.id);
+    await db.prepare("INSERT INTO memberships (list_id, user_id, role) VALUES (?, ?, 'owner')").run(id, req.user.id);
+    res.status(201).json(await db.prepare('SELECT * FROM lists WHERE id = ?').get(id));
   });
 
-  function loadList(req, res, next) {
-    const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
-    if (!list || !canAccess(db, req.user.id, list.id)) return res.status(404).json({ error: 'Lista no encontrada' });
+  async function loadList(req, res, next) {
+    const list = await db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+    if (!list || !(await canAccess(db, req.user.id, list.id))) return res.status(404).json({ error: 'Lista no encontrada' });
     req.list = list;
     next();
   }
 
   app.get('/api/lists/:id', auth, loadList, (req, res) => res.json(req.list));
 
-  app.patch('/api/lists/:id', auth, loadList, (req, res) => {
+  app.patch('/api/lists/:id', auth, loadList, async (req, res) => {
     const updates = [];
     const params = [];
     if (req.body.title !== undefined) {
@@ -111,25 +112,25 @@ function createApp(db) {
     }
     if (!updates.length) return res.status(400).json({ error: 'Nada que actualizar' });
     updates.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
-    db.prepare(`UPDATE lists SET ${updates.join(', ')} WHERE id = ?`).run(...params, req.list.id);
-    res.json(db.prepare('SELECT * FROM lists WHERE id = ?').get(req.list.id));
+    await db.prepare(`UPDATE lists SET ${updates.join(', ')} WHERE id = ?`).run(...params, req.list.id);
+    res.json(await db.prepare('SELECT * FROM lists WHERE id = ?').get(req.list.id));
   });
 
-  app.delete('/api/lists/:id', auth, loadList, (req, res) => {
-    db.prepare('DELETE FROM lists WHERE id = ?').run(req.list.id);
+  app.delete('/api/lists/:id', auth, loadList, async (req, res) => {
+    await db.prepare('DELETE FROM lists WHERE id = ?').run(req.list.id);
     res.json({ ok: true });
   });
 
   // ---- ojitos ----
-  app.get('/api/lists/:id/ojitos', auth, loadList, (req, res) => {
+  app.get('/api/lists/:id/ojitos', auth, loadList, async (req, res) => {
     const status = req.query.status;
     const where = status === 'pending' || status === 'purchased' ? 'AND o.status = ?' : '';
     const args = status === 'pending' || status === 'purchased' ? [req.list.id, status] : [req.list.id];
-    const rows = db.prepare(`SELECT * FROM ojitos o WHERE o.list_id = ? ${where} ORDER BY o.created_at DESC`).all(...args);
+    const rows = await db.prepare(`SELECT * FROM ojitos o WHERE o.list_id = ? ${where} ORDER BY o.created_at DESC`).all(...args);
     res.json(rows);
   });
 
-  app.post('/api/lists/:id/ojitos', auth, loadList, (req, res) => {
+  app.post('/api/lists/:id/ojitos', auth, loadList, async (req, res) => {
     let normalized;
     try {
       normalized = normalizeUrl(req.body.url);
@@ -138,7 +139,7 @@ function createApp(db) {
     }
     const id = newId('oj');
     const store = req.body.store ? String(req.body.store).slice(0, 120) : detectStore(normalized);
-    db.prepare(`INSERT INTO ojitos (id, list_id, url, normalized_url, title, store, image_url, price_snapshot, note, status, preview_status, added_by)
+    await db.prepare(`INSERT INTO ojitos (id, list_id, url, normalized_url, title, store, image_url, price_snapshot, note, status, preview_status, added_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?)`)
       .run(
         id, req.list.id, String(req.body.url).trim(), normalized,
@@ -149,21 +150,21 @@ function createApp(db) {
         req.body.note ? String(req.body.note).slice(0, 1000) : null,
         req.user.id,
       );
-    touchList(db, req.list.id);
+    await touchList(db, req.list.id);
     enrichAsync(db, id, normalized);
-    res.status(201).json(db.prepare('SELECT * FROM ojitos WHERE id = ?').get(id));
+    res.status(201).json(await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(id));
   });
 
-  function loadOjito(req, res, next) {
-    const oj = db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.params.id);
-    if (!oj || !canAccess(db, req.user.id, oj.list_id)) return res.status(404).json({ error: 'Ojito no encontrado' });
+  async function loadOjito(req, res, next) {
+    const oj = await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.params.id);
+    if (!oj || !(await canAccess(db, req.user.id, oj.list_id))) return res.status(404).json({ error: 'Ojito no encontrado' });
     req.ojito = oj;
     next();
   }
 
   app.get('/api/ojitos/:id', auth, loadOjito, (req, res) => res.json(req.ojito));
 
-  app.patch('/api/ojitos/:id', auth, loadOjito, (req, res) => {
+  app.patch('/api/ojitos/:id', auth, loadOjito, async (req, res) => {
     const allowed = ['title', 'store', 'image_url', 'price_snapshot', 'note', 'url', 'status'];
     const sets = [];
     const params = [];
@@ -189,27 +190,27 @@ function createApp(db) {
     }
     if (!sets.length) return res.status(400).json({ error: 'Nada que actualizar' });
     sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
-    db.prepare(`UPDATE ojitos SET ${sets.join(', ')} WHERE id = ?`).run(...params, req.ojito.id);
-    touchList(db, req.ojito.list_id);
-    res.json(db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
+    await db.prepare(`UPDATE ojitos SET ${sets.join(', ')} WHERE id = ?`).run(...params, req.ojito.id);
+    await touchList(db, req.ojito.list_id);
+    res.json(await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
   });
 
-  app.delete('/api/ojitos/:id', auth, loadOjito, (req, res) => {
-    db.prepare('DELETE FROM ojitos WHERE id = ?').run(req.ojito.id);
-    touchList(db, req.ojito.list_id);
+  app.delete('/api/ojitos/:id', auth, loadOjito, async (req, res) => {
+    await db.prepare('DELETE FROM ojitos WHERE id = ?').run(req.ojito.id);
+    await touchList(db, req.ojito.list_id);
     res.json({ ok: true });
   });
 
   app.post('/api/ojitos/:id/retry-preview', auth, loadOjito, async (req, res) => {
-    db.prepare("UPDATE ojitos SET preview_status = 'pending' WHERE id = ?").run(req.ojito.id);
+    await db.prepare("UPDATE ojitos SET preview_status = 'pending' WHERE id = ?").run(req.ojito.id);
     const p = await fetchPreview(req.ojito.normalized_url);
     if (p.ok && (p.title || p.image_url)) {
-      db.prepare('UPDATE ojitos SET title = COALESCE(title, ?), image_url = COALESCE(image_url, ?), preview_status = ? WHERE id = ?')
+      await db.prepare('UPDATE ojitos SET title = COALESCE(title, ?), image_url = COALESCE(image_url, ?), preview_status = ? WHERE id = ?')
         .run(p.title, p.image_url, 'ok', req.ojito.id);
     } else {
-      db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ?").run(req.ojito.id);
+      await db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ?").run(req.ojito.id);
     }
-    res.json(db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
+    res.json(await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
   });
 
   // ---- estatico PWA ----

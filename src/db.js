@@ -3,14 +3,7 @@ const path = require('node:path');
 
 const DB_PATH = process.env.OJITO_DB || path.join(__dirname, '..', 'data.sqlite');
 
-function openDb(dbPath = DB_PATH) {
-  const db = new DatabaseSync(dbPath);
-  db.exec('PRAGMA foreign_keys = ON');
-  return db;
-}
-
-function migrate(db) {
-  db.exec(`
+const SCHEMA_SQL = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -57,7 +50,109 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
     CREATE INDEX IF NOT EXISTS idx_ojitos_list ON ojitos(list_id);
-  `);
+`;
+
+function useTurso(dbPath) {
+  // Tests usan ':memory:' y deben seguir en local aunque haya TURSO_* en env.
+  if (dbPath === ':memory:') return false;
+  return !!process.env.TURSO_DATABASE_URL;
 }
 
-module.exports = { openDb, migrate, DB_PATH };
+function normalizeArgs(params) {
+  let args = params;
+  if (args.length === 1 && Array.isArray(args[0])) args = args[0];
+  return args.map((v) => (v === undefined ? null : v));
+}
+
+function rowsToObjects(rs) {
+  if (!rs || !rs.rows) return [];
+  const rows = rs.rows;
+  if (rows.length === 0) return [];
+  // @libsql/client ya devuelve objetos {col: val} en la mayoria de builds.
+  if (!Array.isArray(rows[0])) return rows;
+  const cols = rs.columns || [];
+  return rows.map((r) => Object.fromEntries(r.map((v, i) => [cols[i] || i, v])));
+}
+
+function openDb(dbPath = DB_PATH) {
+  if (useTurso(dbPath)) {
+    const { createClient } = require('@libsql/client');
+    const client = createClient({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+    const tursoPrepare = (sql) => ({
+      get: async (...params) => {
+        const rs = await client.execute({ sql, args: normalizeArgs(params) });
+        const objs = rowsToObjects(rs);
+        return objs[0];
+      },
+      all: async (...params) => {
+        const rs = await client.execute({ sql, args: normalizeArgs(params) });
+        return rowsToObjects(rs);
+      },
+      run: async (...params) => {
+        const rs = await client.execute({ sql, args: normalizeArgs(params) });
+        return { changes: rs.rowsAffected ?? 0, lastInsertRowid: rs.lastInsertRowid };
+      },
+    });
+    return {
+      _turso: true,
+      _client: client,
+      prepare: tursoPrepare,
+      exec: async (sql) => {
+        for (const stmt of sql.split(';')) {
+          const s = stmt.trim();
+          if (s) await client.execute(s);
+        }
+      },
+      // Helpers directos (mapean get/all/run sin pasar por prepare).
+      get: async (sql, args = []) => {
+        const rs = await client.execute({ sql, args: normalizeArgs([args]).flat() });
+        return rowsToObjects(rs)[0];
+      },
+      all: async (sql, args = []) => {
+        const flat = Array.isArray(args) ? args : [args];
+        const rs = await client.execute({ sql, args: flat.map((v) => (v === undefined ? null : v)) });
+        return rowsToObjects(rs);
+      },
+      run: async (sql, args = []) => {
+        const flat = Array.isArray(args) ? args : [args];
+        const rs = await client.execute({ sql, args: flat.map((v) => (v === undefined ? null : v)) });
+        return { changes: rs.rowsAffected ?? 0 };
+      },
+      close: async () => client.close(),
+    };
+  }
+  const db = new DatabaseSync(dbPath);
+  db.exec('PRAGMA foreign_keys = ON');
+  // Helpers async-compatibles para unificar con Turso (await funciona en ambos).
+  if (!db.get) {
+    db.get = (...a) => {
+      const [sql, ...rest] = a;
+      const args = rest.length === 1 && Array.isArray(rest[0]) ? rest[0] : rest;
+      return db.prepare(sql).get(...args);
+    };
+    db.all = (...a) => {
+      const [sql, ...rest] = a;
+      const args = rest.length === 1 && Array.isArray(rest[0]) ? rest[0] : rest;
+      return db.prepare(sql).all(...args);
+    };
+    db.run = (...a) => {
+      const [sql, ...rest] = a;
+      const args = rest.length === 1 && Array.isArray(rest[0]) ? rest[0] : rest;
+      return db.prepare(sql).run(...args);
+    };
+  }
+  return db;
+}
+
+async function migrate(db) {
+  if (db && db._turso) {
+    await db.exec(SCHEMA_SQL);
+    return;
+  }
+  db.exec(SCHEMA_SQL);
+}
+
+module.exports = { openDb, migrate, DB_PATH, SCHEMA_SQL };

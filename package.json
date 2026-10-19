@@ -38,6 +38,7 @@
     "SECURITY.md"
   ],
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "express": "^5.3.0"
   }
 }

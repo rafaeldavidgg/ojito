@@ -40,10 +40,12 @@ Toda la configuración es opcional y va por variables de entorno. Copia la plant
 cp .env.example .env
 ```
 
-| Variable   | Por defecto      | Descripción                              |
-|------------|------------------|------------------------------------------|
-| `PORT`     | `3000`           | Puerto HTTP donde escucha la app.        |
-| `OJITO_DB` | `./data.sqlite`  | Ruta del fichero SQLite.                 |
+| Variable            | Por defecto      | Descripción                              |
+|---------------------|------------------|------------------------------------------|
+| `PORT`              | `3000`           | Puerto HTTP donde escucha la app.        |
+| `OJITO_DB`          | `./data.sqlite`  | Ruta del fichero SQLite (solo sin Turso).|
+| `TURSO_DATABASE_URL`| —                | URL libsql remota. Si existe, tiene prioridad sobre `OJITO_DB`. |
+| `TURSO_AUTH_TOKEN`  | —                | Token de acceso a Turso.                 |
 
 Ejemplos:
 
@@ -143,6 +145,38 @@ npm test   # node --test test/ojito.test.js (usa BD en memoria)
 
 Cubre: esquema share-ready, aislamiento de listas por membership, CRUD de ojitos y
 preview bloqueada sin impedir el guardado.
+
+## Despliegue 0E (Render + Turso)
+
+Misma API, sin dominio comprado. Render duerme tras 15 min sin trafico
+(primera peticion ~60s), la URL `*.onrender.com` y los datos en Turso no se pierden.
+
+1. Crea DB y token en Turso, copia `TURSO_DATABASE_URL` (`libsql://...`) y `TURSO_AUTH_TOKEN`.
+2. Migra una vez contra Turso desde local:
+```sh
+# bash
+TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." node -e "const m=require('./src/db.js');(async()=>{await m.migrate(m.openDb());console.log('migrado')})()"
+```
+```powershell
+# PowerShell
+$env:TURSO_DATABASE_URL="libsql://..."
+$env:TURSO_AUTH_TOKEN="..."
+node -e "const m=require('./src/db.js');(async()=>{await m.migrate(m.openDb());console.log('migrado')})()"
+```
+3. Sube a Render (usa `render.yaml`: 1 web Free, `npm ci --omit=dev`, `node src/server.js`) con envs `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
+4. Smoke en la URL publica:
+```sh
+curl -X POST $URL/api/register -H "content-type: application/json" -d '{"email":"yo@ojito.app","password":"supersecreta1"}'
+# usa el token devuelto para crear lista + ojito y comprueba GET /api/lists
+```
+5. Persistencia: crea lista+ojito, reinicia el servicio en Render, `GET /api/lists` debe devolver lo mismo.
+6. Rollback: quita `TURSO_*` y vuelve a `OJITO_DB` local sin redeploy de codigo.
+
+Docker local (requiere Docker instalado):
+```sh
+docker build -t ojito .
+docker run -p 3000:3000 -e TURSO_DATABASE_URL="..." -e TURSO_AUTH_TOKEN="..." ojito
+```
 
 ## Roadmap
 
