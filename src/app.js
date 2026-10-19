@@ -23,12 +23,21 @@ function enrichAsync(db, ojitoId, url) {
         await db.prepare('UPDATE ojitos SET title = COALESCE(NULLIF(title,\'\'), ?), image_url = COALESCE(image_url, ?), preview_status = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\') WHERE id = ?')
           .run(p.title || null, p.image_url || null, 'ok', ojitoId);
       } else {
-        await db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ? AND preview_status = 'pending'").run(ojitoId);
+        await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END WHERE id = ? AND preview_status = 'pending'").run(ojitoId);
       }
     } catch {
       // best-effort: ignorar
     }
   });
+}
+
+function isHttpUrl(v) {
+  try {
+    const u = new URL(String(v).trim());
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function createApp(db) {
@@ -139,6 +148,9 @@ function createApp(db) {
     }
     const id = newId('oj');
     const store = req.body.store ? String(req.body.store).slice(0, 120) : detectStore(normalized);
+    if (req.body.image_url !== undefined && req.body.image_url !== null && String(req.body.image_url).trim() !== '') {
+      if (!isHttpUrl(req.body.image_url)) return res.status(400).json({ error: 'URL de imagen invalida: usa http(s)' });
+    }
     await db.prepare(`INSERT INTO ojitos (id, list_id, url, normalized_url, title, store, image_url, price_snapshot, note, status, preview_status, added_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?)`)
       .run(
@@ -182,6 +194,21 @@ function createApp(db) {
         if (!['pending', 'purchased'].includes(req.body.status)) return res.status(400).json({ error: 'Estado invalido' });
         sets.push('status = ?', 'purchased_at = ?');
         params.push(req.body.status, req.body.status === 'purchased' ? new Date().toISOString() : null);
+      } else if (k === 'image_url') {
+        if (req.body[k] === null) {
+          sets.push(`${k} = ?`);
+          params.push(null);
+        } else {
+          const s = String(req.body[k]).trim();
+          if (s === '') {
+            sets.push(`${k} = ?`);
+            params.push(null);
+          } else {
+            if (!isHttpUrl(s)) return res.status(400).json({ error: 'URL de imagen invalida: usa http(s)' });
+            sets.push(`${k} = ?`);
+            params.push(s.slice(0, 2000));
+          }
+        }
       } else {
         const v = req.body[k] === null ? null : String(req.body[k]).slice(0, k === 'note' ? 1000 : 2000);
         sets.push(`${k} = ?`);
@@ -208,7 +235,7 @@ function createApp(db) {
       await db.prepare('UPDATE ojitos SET title = COALESCE(title, ?), image_url = COALESCE(image_url, ?), preview_status = ? WHERE id = ?')
         .run(p.title, p.image_url, 'ok', req.ojito.id);
     } else {
-      await db.prepare("UPDATE ojitos SET preview_status = 'unavailable' WHERE id = ?").run(req.ojito.id);
+      await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END WHERE id = ?").run(req.ojito.id);
     }
     res.json(await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
   });

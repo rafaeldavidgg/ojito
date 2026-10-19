@@ -123,9 +123,22 @@ Reglas: toda lectura/escritura de lista u ojito exige pertenencia. `visibility` 
 ## Previews
 
 `POST /api/lists/:id/ojitos` guarda al instante y dispara `fetchPreview` en background
-(timeout 6 s, límite 500 KB, máx. 3 redirects, bloqueo SSRF básico). Si falla →
-`preview_status='unavailable'` y edición manual. Reintento:
-`POST /api/ojitos/:id/retry-preview`.
+(timeout 6 s, límite 500 KB, máx. 3 redirects, bloqueo SSRF básico). El parser acepta
+`og:image`, `og:image:secure_url`, `twitter:image`, `<link rel="image_src">`, JSON-LD
+`image` y, como último recurso, la primera `<img>` grande. Si falla (p. ej. 403
+Cloudflare de VS/Lush) → `preview_status='unavailable'` y hay que introducir la
+imagen a mano. Reintento: `POST /api/ojitos/:id/retry-preview` (nunca borra una
+imagen puesta a mano).
+
+### Poner la imagen a mano desde el móvil
+
+1. En la tienda, mantén pulsada la foto → **Copiar enlace de imagen**.
+2. En la ficha sin preview de Ojito, pega esa URL en **URL de la imagen** (botón
+   **Pegar** disponible) y comprueba la vista previa instantánea.
+3. **Guardar imagen** (o desde **Editar** → campo URL de la imagen).
+
+Límite honesto: se guarda la URL (hotlink, sin subidas ni cuota). Si la tienda firma
+URLs que caducan o bloquea el hotlink, la foto puede caer: vuelve a pegarla.
 
 ## Seguridad
 

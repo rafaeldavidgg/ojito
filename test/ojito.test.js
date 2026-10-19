@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { openDb, migrate } = require('../src/db');
 const { createApp } = require('../src/app');
+const { pickImage } = require('../src/preview');
 
 function memApp() {
   const db = openDb(':memory:');
@@ -114,6 +117,53 @@ test('preview bloqueada no impide guardar + share-ready via SQL', async () => {
     db.prepare("INSERT INTO memberships (list_id, user_id, role) VALUES (?, ?, 'editor')").run(l.json.id, rowB.id);
     const seen = await api(port, 'GET', `/api/lists/${l.json.id}`, bb.json.token);
     assert.equal(seen.status, 200);
+  } finally {
+    srv.close();
+  }
+});
+
+test('pwa icons: favicon + manifest con iconos instalables', async () => {
+  for (const f of ['icon.svg', 'icon-32.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'maskable-512.png']) {
+    assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'icons', f)), `falta public/icons/${f}`);
+  }
+  const man = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'manifest.webmanifest'), 'utf8'));
+  assert.ok(man.icons && man.icons.length >= 2, 'manifest debe listar iconos');
+  assert.ok(man.icons.some((i) => i.sizes === '192x192'), 'manifest necesita 192');
+  assert.ok(man.icons.some((i) => i.sizes === '512x512'), 'manifest necesita 512');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.ok(html.includes('rel="apple-touch-icon"'), 'index debe enlazar apple-touch-icon');
+});
+
+test('preview ampliada: twitter/json-ld/image_src sin red + manual no se pisa + esquema invalido', async () => {
+  const base = 'https://tienda.example/p/1';
+  assert.equal(pickImage('<meta name="twitter:image" content="https://cdn.example/t.jpg">', base), 'https://cdn.example/t.jpg');
+  assert.equal(pickImage('<link rel="image_src" href="https://cdn.example/i.jpg">', base), 'https://cdn.example/i.jpg');
+  assert.equal(pickImage('<script type="application/ld+json">{"@type":"Product","image":"https://cdn.example/j.jpg"}</script>', base), 'https://cdn.example/j.jpg');
+  assert.equal(pickImage('<meta property="og:image" content="data:image/png;base64,AAA">', base), null);
+  assert.equal(pickImage('<meta property="og:image" content="javascript:alert(1)">', base), null);
+
+  const { app } = memApp();
+  const srv = await start(app);
+  const port = srv.address().port;
+  try {
+    const a = await api(port, 'POST', '/api/register', null, { email: 'img@ojito.app', password: 'supersecreta1' });
+    const l = await api(port, 'POST', '/api/lists', a.json.token, { title: 'Fotos' });
+    const o = await api(port, 'POST', `/api/lists/${l.json.id}/ojitos`, a.json.token, { url: 'http://localhost:9/nonexistent' });
+    assert.equal(o.status, 201);
+
+    const manual = 'https://cdn.example/manual.jpg';
+    const patch = await api(port, 'PATCH', `/api/ojitos/${o.json.id}`, a.json.token, { image_url: manual });
+    assert.equal(patch.status, 200);
+    assert.equal(patch.json.image_url, manual);
+
+    const bad = await api(port, 'PATCH', `/api/ojitos/${o.json.id}`, a.json.token, { image_url: 'javascript:alert(1)' });
+    assert.equal(bad.status, 400);
+
+    await new Promise((r) => setTimeout(r, 300));
+    const retry = await api(port, 'POST', `/api/ojitos/${o.json.id}/retry-preview`, a.json.token);
+    assert.equal(retry.status, 200);
+    assert.equal(retry.json.image_url, manual);
+    assert.equal(retry.json.preview_status, 'ok');
   } finally {
     srv.close();
   }

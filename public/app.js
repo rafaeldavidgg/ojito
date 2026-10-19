@@ -67,13 +67,25 @@ async function loadDetail() {
     const d = document.createElement('article');
     d.className = 'tile';
     const title = o.title || 'Ojito sin título';
+    const needsImage = !o.image_url && o.preview_status === 'unavailable';
     const media = o.image_url
-      ? `<img src="${o.image_url}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" sizes="(max-width: 480px) 100vw, (max-width: 1100px) 50vw, 33vw">`
-      : `<div class="noimg">${o.preview_status === 'unavailable' ? 'Sin preview — edítalo a mano' : 'Buscando preview…'}</div>`;
-    d.innerHTML = `${media}<div class="body"><span class="store">${o.store || 'link'}</span><h4>${escapeHtml(title)}</h4>
+      ? `<img src="${escapeAttr(o.image_url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" sizes="(max-width: 480px) 100vw, (max-width: 1100px) 50vw, 33vw">`
+      : `<div class="noimg">${needsImage ? 'Sin preview automática — pega la URL de la imagen' : o.preview_status === 'unavailable' ? 'Sin preview — edítalo a mano' : 'Buscando preview…'}</div>`;
+    d.innerHTML = `${media}<div class="body"><span class="store">${escapeHtml(o.store || 'link')}</span><h4>${escapeHtml(title)}</h4>
       <a class="url" href="${escapeAttr(o.url)}" target="_blank" rel="noopener">${escapeHtml(shortUrl(o.url))}</a>
       ${o.note ? `<p class="note">${escapeHtml(o.note)}</p>` : ''}
+      ${needsImage ? `<form class="imgform" novalidate>
+        <label>URL de la imagen<input class="imginput" inputmode="url" autocomplete="url" placeholder="https://…" aria-label="URL de la imagen"></label>
+        <p class="hint">En la tienda: mantén la foto → Copiar enlace de imagen → pégalo aquí.</p>
+        <div class="imgpreview" hidden></div>
+        <p class="imgerror error" role="alert" aria-live="polite" hidden></p>
+        <div class="imgrow">
+          <button type="button" class="btn ghost small paste">Pegar</button>
+          <button type="submit" class="btn primary small save">Guardar imagen</button>
+        </div>
+      </form>` : ''}
       <div class="actions"></div></div>`;
+    if (needsImage) wireImgForm(d.querySelector('.imgform'), o);
     const acts = d.querySelector('.actions');
     const toggle = document.createElement('button');
     toggle.className = 'linklike';
@@ -81,13 +93,7 @@ async function loadDetail() {
     toggle.onclick = async () => { await req('PATCH', `/api/ojitos/${o.id}`, { status: o.status === 'pending' ? 'purchased' : 'pending' }); loadDetail(); loadLists(); };
     const edit = document.createElement('button');
     edit.className = 'linklike'; edit.textContent = 'Editar';
-    edit.onclick = async () => {
-      const t = prompt('Título', o.title || '');
-      if (t === null) return;
-      const n = prompt('Nota', o.note || '');
-      await req('PATCH', `/api/ojitos/${o.id}`, { title: t, note: n });
-      loadDetail();
-    };
+    edit.onclick = () => openEditSheet(o);
     const retry = document.createElement('button');
     retry.className = 'linklike'; retry.textContent = 'Reintentar preview';
     retry.onclick = async () => { await req('POST', `/api/ojitos/${o.id}/retry-preview`); loadDetail(); };
@@ -99,9 +105,111 @@ async function loadDetail() {
   }
 }
 
+function wireImgForm(form, o) {
+  if (!form) return;
+  const input = form.querySelector('.imginput');
+  const preview = form.querySelector('.imgpreview');
+  const error = form.querySelector('.imgerror');
+  const showPreview = () => {
+    const v = input.value.trim();
+    error.hidden = true;
+    preview.hidden = true;
+    preview.innerHTML = '';
+    if (!v) return;
+    if (!isHttpImageUrl(v)) {
+      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
+      error.hidden = false;
+      return;
+    }
+    preview.innerHTML = `<img src="${escapeAttr(v)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+    preview.hidden = false;
+  };
+  input.addEventListener('input', showPreview);
+  form.querySelector('.paste').onclick = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) { input.value = t.trim(); showPreview(); return; }
+    } catch { /* sin permiso: foco manual */ }
+    input.focus();
+  };
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!isHttpImageUrl(v)) {
+      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
+      error.hidden = false;
+      return;
+    }
+    try {
+      await req('PATCH', `/api/ojitos/${o.id}`, { image_url: v });
+      loadDetail();
+    } catch (err) { error.textContent = err.message; error.hidden = false; }
+  });
+}
+
+function openEditSheet(o) {
+  closeEditSheet();
+  const dlg = document.createElement('div');
+  dlg.id = 'editSheet';
+  dlg.className = 'sheet-backdrop';
+  dlg.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Editar ojito">
+    <h3>Editar ojito</h3>
+    <label>Título<input class="f-title" maxlength="300" value="${escapeAttr(o.title || '')}" placeholder="Camiseta larga pijama"></label>
+    <label>URL de la imagen<input class="f-image" inputmode="url" autocomplete="url" placeholder="https://…" value="${escapeAttr(o.image_url || '')}" aria-label="URL de la imagen"></label>
+    <p class="hint">En la tienda: mantén la foto → Copiar enlace de imagen → pégalo aquí. Si la tienda caduca el enlace, la foto puede caer: vuelve a pegarla.</p>
+    <div class="imgpreview" hidden></div>
+    <p class="imgerror error" role="alert" aria-live="polite" hidden></p>
+    <label>Nota<input class="f-note" maxlength="1000" value="${escapeAttr(o.note || '')}" placeholder="Talla, color…"></label>
+    <div class="sheet-row">
+      <button class="btn ghost small cancel" type="button">Cancelar</button>
+      <button class="btn primary small save" type="button">Guardar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(dlg);
+  const title = dlg.querySelector('.f-title');
+  const image = dlg.querySelector('.f-image');
+  const note = dlg.querySelector('.f-note');
+  const preview = dlg.querySelector('.imgpreview');
+  const error = dlg.querySelector('.imgerror');
+  const refresh = () => {
+    const v = image.value.trim();
+    error.hidden = true;
+    preview.hidden = true;
+    preview.innerHTML = '';
+    if (!v) return;
+    if (!isHttpImageUrl(v)) {
+      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
+      error.hidden = false;
+      return;
+    }
+    preview.innerHTML = `<img src="${escapeAttr(v)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+    preview.hidden = false;
+  };
+  image.addEventListener('input', refresh);
+  refresh();
+  if (image.value) title.focus(); else image.focus();
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) closeEditSheet(); });
+  dlg.querySelector('.cancel').onclick = closeEditSheet;
+  dlg.querySelector('.save').onclick = async () => {
+    const img = image.value.trim();
+    if (img && !isHttpImageUrl(img)) {
+      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
+      error.hidden = false;
+      return;
+    }
+    try {
+      await req('PATCH', `/api/ojitos/${o.id}`, { title: title.value, note: note.value, image_url: img === '' ? null : img });
+      closeEditSheet();
+      loadDetail();
+    } catch (err) { error.textContent = err.message; error.hidden = false; }
+  };
+}
+
+function closeEditSheet() { document.querySelector('#editSheet')?.remove(); }
 function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 function shortUrl(u) { try { const x = new URL(u); return x.hostname.replace(/^www\./, '') + x.pathname.slice(0, 40); } catch { return u; } }
+function isHttpImageUrl(s) { try { const u = new URL(String(s || '').trim()); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } }
 
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
