@@ -17,9 +17,9 @@
 - [x] 3.1 Crear `Dockerfile` Node 22-slim (`npm ci --omit=dev`, `CMD node src/server.js`) y verificar con `docker build -t ojito .` y `docker run -p 3000:3000 ojito` responde
 - [x] 3.2 Crear `render.yaml` (1 web service Free, `PORT`, healthcheck) y verificar con `openspec` o Render dashboard que el plan detecta 1 servicio Free sin disco
 - [x] 3.3 Crear DB y token en Turso, ejecutar migracion remota una vez y verificar con query de conteo de tablas remota no vacia
-- [ ] 3.4 Desplegar en Render con `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` y verificar con `POST /api/register`, `POST /api/lists`, `POST /api/lists/:id/ojitos` en la URL publica
+- [x] 3.4 Desplegar en Render con `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` y verificar con `POST /api/register`, `POST /api/lists`, `POST /api/lists/:id/ojitos` en la URL publica
 
 ## 4. Persistencia y docs
 
-- [ ] 4.1 Verificar persistencia tras sleep/redeploy: crear lista+ojito, reiniciar servicio en Render, comprobar que `GET /api/lists` y `GET /api/lists/:id/ojitos` devuelven lo mismo
+- [x] 4.1 Verificar persistencia tras sleep/redeploy: crear lista+ojito, reiniciar servicio en Render, comprobar que `GET /api/lists` y `GET /api/lists/:id/ojitos` devuelven lo mismo
 - [x] 4.2 Documentar en `README.md` despliegue Render+Turso, envs y limite sleep 60s, y verificar que los comandos documentados corren tal cual (`npm start`, `docker build`, curl de smoke)
