@@ -21,13 +21,13 @@
 ## 4. Git local y publicación en GitHub
 
 - [x] 4.1 Confirmar con el usuario el titular de `LICENSE`/`author` y el usuario de GitHub, ajustar los placeholders, y verificar `git diff --stat` solo toca archivos previstos.
-- [ ] 4.2 Inicializar git (`git init -b main` si falta), `git add` selectivo y commit inicial, y verificar con `git status --porcelain` limpio y `git ls-files | grep -E 'sqlite|\.env$|node_modules'` vacío.
-- [ ] 4.3 Publicar con `gh repo create ojito --public --source=. --remote=origin --push` (fallback manual: crear repo vacío `ojito` en la web y `git remote add origin … && git push -u origin main`; si el nombre está ocupado, parar y preguntar, nunca publicar con otro nombre sin confirmación), y verificar que el remoto existe, es público y la rama por defecto es `main`.
+- [x] 4.2 Inicializar git (`git init -b main` si falta), `git add` selectivo y commit inicial, y verificar con `git status --porcelain` limpio y `git ls-files | grep -E 'sqlite|\.env$|node_modules'` vacío.
+- [x] 4.3 Publicar con `gh repo create ojito --public --source=. --remote=origin --push` (fallback manual: crear repo vacío `ojito` en la web y `git remote add origin … && git push -u origin main`; si el nombre está ocupado, parar y preguntar, nunca publicar con otro nombre sin confirmación), y verificar que el remoto existe, es público y la rama por defecto es `main`.
 
 ## 5. Verificación del repo público
 
-- [ ] 5.1 Verificar en la web del repo `ojito` que el árbol no contiene `data.sqlite`, `.env` ni `node_modules`, que `LICENSE` se detecta como MIT y que el CI corre `npm test` en verde.
-- [ ] 5.2 Clonar el repo público en un directorio temporal, ejecutar `npm install && npm test && PORT=3100 npm start` y verificar arranque y tests en verde desde el clon limpio.
+- [x] 5.1 Verificar en la web del repo `ojito` que el árbol no contiene `data.sqlite`, `.env` ni `node_modules`, que `LICENSE` se detecta como MIT y que el CI corre `npm test` en verde.
+- [x] 5.2 Clonar el repo público en un directorio temporal, ejecutar `npm install && npm test && PORT=3100 npm start` y verificar arranque y tests en verde desde el clon limpio.
 
 ## Workflow follow-up
 
