@@ -1,0 +1,43 @@
+{
+  "name": "ojito",
+  "version": "1.0.0",
+  "description": "Ojito MVP - listas privadas de deseos multi-tienda, share-ready",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/ojito.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafaeldavidgg/ojito.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rafaeldavidgg/ojito/issues"
+  },
+  "homepage": "https://github.com/rafaeldavidgg/ojito#readme",
+  "keywords": [
+    "wishlist",
+    "listas-de-deseos",
+    "express",
+    "sqlite",
+    "pwa"
+  ],
+  "author": "rafaeldavidgg",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "src/",
+    "public/",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}

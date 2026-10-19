@@ -1,0 +1,35 @@
+name: Bug report
+description: Informa de un error en Ojito
+labels: [bug]
+body:
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: ¿Qué pasa?
+      description: Descripción clara del error.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducir
+    attributes:
+      label: Cómo reproducirlo
+      description: Pasos exactos, empezando desde un clon limpio.
+      placeholder: |
+        1. npm install
+        2. npm start
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Comportamiento esperado
+    validations:
+      required: true
+  - type: input
+    id: entorno
+    attributes:
+      label: Entorno
+      description: Versión de Node (`node --version`), SO y commit/rama.
+    validations:
+      required: true

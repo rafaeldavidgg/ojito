@@ -1,0 +1,22 @@
+name: Feature request
+description: Propón una mejora para Ojito
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: ¿Qué problema resuelve?
+      description: Qué necesidad cubre y para quién.
+    validations:
+      required: true
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+      description: Cómo lo imaginas funcionando. Si afecta al modelo de datos, indica si respeta el diseño share-ready.
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas

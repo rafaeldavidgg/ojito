@@ -1,0 +1,29 @@
+# Dependencias y artefactos locales (nunca subir al repo)
+node_modules/
+coverage/
+*.log
+
+# Base de datos SQLite local (contiene datos reales de desarrollo)
+data.sqlite
+*.sqlite
+*.sqlite-*
+
+# Variables de entorno locales (ver .env.example para la plantilla pública)
+.env
+.env.*
+!.env.example
+
+# Temporales del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Tooling local del agente (específico de esta máquina)
+.opencode/
