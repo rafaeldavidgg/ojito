@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ojito — tus listas de deseos</title>
 <meta name="theme-color" content="#faf5ec">
+<meta name="description" content="Ojito — guarda enlaces de cualquier tienda en listas privadas y encuéntralos cuando importe.">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+<a class="skip" href="#app">Saltar al contenido</a>
 <header class="top">
   <div class="brand">
     <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><path d="M2 16C6 9.5 11 6 16 6s10 3.5 14 10c-4 6.5-9 10-14 10S6 22.5 2 16Z" fill="none" stroke="#b3274a" stroke-width="2.4" stroke-linejoin="round"/><circle cx="16" cy="16" r="5.2" fill="#b3274a"/><circle cx="17.8" cy="14.2" r="1.6" fill="#faf5ec"/></svg>
@@ -18,49 +20,49 @@
 </header>
 
 <main id="app">
-  <section id="authView" class="panel" hidden>
-    <h1>Guarda lo que te gusta.<br>Encuéntralo cuando importe.</h1>
+  <section id="authView" class="panel" hidden aria-labelledby="authTitle">
+    <h1 id="authTitle">Guarda lo que te gusta.<br>Encuéntralo cuando importe.</h1>
     <p class="lede">Pega enlaces de Zara, Primor o donde sea y organízalos en listas: Navidad, Aniversario, Caprichos…</p>
-    <form id="authForm">
-      <label>Email<input id="email" type="email" required autocomplete="email" placeholder="tu@email.com"></label>
-      <label>Contraseña<input id="password" type="password" required minlength="8" placeholder="mínimo 8 caracteres"></label>
+    <form id="authForm" aria-label="Acceso o registro">
+      <label for="email">Email<input id="email" type="email" required autocomplete="email" placeholder="tu@email.com"></label>
+      <label for="password">Contraseña<input id="password" type="password" required minlength="8" autocomplete="current-password" placeholder="mínimo 8 caracteres"></label>
       <div class="row">
         <button type="submit" data-mode="login" class="btn primary">Entrar</button>
         <button type="submit" data-mode="register" class="btn ghost">Crear cuenta</button>
       </div>
-      <p id="authError" class="error"></p>
+      <p id="authError" class="error" role="alert" aria-live="polite"></p>
     </form>
   </section>
 
-  <section id="mainView" hidden>
+  <section id="mainView" hidden aria-labelledby="listsHeading">
     <div class="lists-head">
-      <h2>Mis listas</h2>
-      <form id="newListForm" class="inline-form">
-        <input id="newListTitle" maxlength="80" placeholder="Nueva lista: Navidad…" required>
+      <h2 id="listsHeading">Mis listas</h2>
+      <form id="newListForm" class="inline-form" aria-label="Crear lista">
+        <input id="newListTitle" maxlength="80" placeholder="Nueva lista: Navidad…" required aria-label="Nombre de la nueva lista">
         <button class="btn primary small" type="submit">Crear</button>
       </form>
     </div>
-    <div id="lists" class="chips"></div>
+    <div id="lists" class="chips" role="group" aria-label="Tus listas"></div>
 
     <div id="detail" class="detail" hidden>
       <div class="detail-head">
         <h3 id="detailTitle"></h3>
-        <div class="detail-actions">
+        <div class="detail-actions" role="group" aria-label="Acciones de la lista">
           <button id="renameBtn" class="btn ghost small">Renombrar</button>
           <button id="archiveBtn" class="btn ghost small">Archivar</button>
           <button id="deleteListBtn" class="btn danger small">Eliminar</button>
         </div>
       </div>
-      <form id="newOjitoForm" class="inline-form">
-        <input id="newOjitoUrl" inputmode="url" placeholder="Pega un enlace: zara.com, primor.eu…" required>
+      <form id="newOjitoForm" class="inline-form" aria-label="Guardar ojito">
+        <input id="newOjitoUrl" inputmode="url" autocomplete="url" placeholder="Pega un enlace: zara.com, primor.eu…" required aria-label="URL del ojito">
         <button class="btn primary small" type="submit">Guardar ojito</button>
       </form>
-      <div class="filters">
-        <button data-filter="pending" class="chip active">Pendientes</button>
-        <button data-filter="purchased" class="chip">Comprados</button>
-        <button data-filter="all" class="chip">Todos</button>
+      <div class="filters" role="group" aria-label="Filtrar por estado">
+        <button data-filter="pending" class="chip active" aria-pressed="true">Pendientes</button>
+        <button data-filter="purchased" class="chip" aria-pressed="false">Comprados</button>
+        <button data-filter="all" class="chip" aria-pressed="false">Todos</button>
       </div>
-      <div id="grid" class="masonry"></div>
+      <div id="grid" class="masonry" aria-live="polite"></div>
     </div>
   </section>
 </main>

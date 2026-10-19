@@ -54,7 +54,11 @@ async function loadDetail() {
   if (!activeList) return;
   $('#detail').hidden = false;
   $('#detailTitle').textContent = activeList.title;
-  document.querySelectorAll('.filters .chip').forEach((c) => c.classList.toggle('active', c.dataset.filter === filter));
+  document.querySelectorAll('.filters .chip').forEach((c) => {
+    const on = c.dataset.filter === filter;
+    c.classList.toggle('active', on);
+    c.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   const items = await req('GET', `/api/lists/${activeList.id}/ojitos?status=${filter}`);
   const grid = $('#grid');
   grid.innerHTML = '';
@@ -64,7 +68,7 @@ async function loadDetail() {
     d.className = 'tile';
     const title = o.title || 'Ojito sin título';
     const media = o.image_url
-      ? `<img src="${o.image_url}" alt="" loading="lazy">`
+      ? `<img src="${o.image_url}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" sizes="(max-width: 480px) 100vw, (max-width: 1100px) 50vw, 33vw">`
       : `<div class="noimg">${o.preview_status === 'unavailable' ? 'Sin preview — edítalo a mano' : 'Buscando preview…'}</div>`;
     d.innerHTML = `${media}<div class="body"><span class="store">${o.store || 'link'}</span><h4>${escapeHtml(title)}</h4>
       <a class="url" href="${escapeAttr(o.url)}" target="_blank" rel="noopener">${escapeHtml(shortUrl(o.url))}</a>
