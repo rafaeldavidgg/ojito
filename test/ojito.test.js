@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { openDb, migrate } = require('../src/db');
 const { createApp } = require('../src/app');
-const { pickImage } = require('../src/preview');
+const { pickImage, pickTitle, fetchPreview } = require('../src/preview');
 
 function memApp() {
   const db = openDb(':memory:');
@@ -164,6 +164,77 @@ test('preview ampliada: twitter/json-ld/image_src sin red + manual no se pisa + 
     assert.equal(retry.status, 200);
     assert.equal(retry.json.image_url, manual);
     assert.equal(retry.json.preview_status, 'ok');
+  } finally {
+    srv.close();
+  }
+});
+
+function stubFetch(html, { chunkSize = 65536 } = {}) {
+  const buf = Buffer.from(html);
+  const chunks = [];
+  for (let i = 0; i < buf.length; i += chunkSize) chunks.push(buf.subarray(i, i + chunkSize));
+  let reads = 0;
+  const prev = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    body: {
+      getReader() {
+        let i = 0;
+        return {
+          async read() {
+            reads++;
+            if (i >= chunks.length) return { done: true, value: undefined };
+            return { done: false, value: chunks[i++] };
+          },
+          async cancel() { i = chunks.length; },
+        };
+      },
+    },
+  });
+  return { restore: () => { global.fetch = prev; }, reads: () => reads, total: chunks.length + 1 };
+}
+
+test('preview fiable: streaming corta en pagina pesada + entidades + motivo http-403', async () => {
+  // HTML de ~1.2MB con metas al inicio (caso ficha Primor)
+  const heavy = '<html><head><title>T</title><meta property="og:title" content="B&#xE1;lsamo"><meta property="og:image" content="https://cdn.example/p.jpg"></head><body>'
+    + 'x'.repeat(1200000) + '</body></html>';
+  const stub = stubFetch(heavy);
+  try {
+    const p = await fetchPreview('https://tienda.example/pesada');
+    assert.equal(p.ok, true);
+    assert.equal(p.image_url, 'https://cdn.example/p.jpg');
+    assert.equal(p.title, 'Bálsamo');
+    assert.ok(stub.reads() < stub.total, `debe cortar temprano (reads=${stub.reads()} de ${stub.total})`);
+  } finally {
+    stub.restore();
+  }
+
+  // 403 deja motivo http-403
+  const prev = global.fetch;
+  global.fetch = async () => ({ ok: false, status: 403, headers: { get: () => null } });
+  try {
+    const p = await fetchPreview('https://tienda.example/bloqueada');
+    assert.equal(p.ok, false);
+    assert.equal(p.reason, 'http-403');
+  } finally {
+    global.fetch = prev;
+  }
+
+  // El motivo se persiste en BD sin tumbar el guardado
+  const { app } = memApp();
+  const srv = await start(app);
+  const port = srv.address().port;
+  try {
+    const a = await api(port, 'POST', '/api/register', null, { email: 'mot@ojito.app', password: 'supersecreta1' });
+    const l = await api(port, 'POST', '/api/lists', a.json.token, { title: 'L' });
+    const o = await api(port, 'POST', `/api/lists/${l.json.id}/ojitos`, a.json.token, { url: 'http://localhost:9/nonexistent' });
+    assert.equal(o.status, 201);
+    await new Promise((r) => setTimeout(r, 500));
+    const row = await api(port, 'GET', `/api/ojitos/${o.json.id}`, a.json.token);
+    assert.equal(row.json.preview_status, 'unavailable');
+    assert.equal(row.json.preview_reason, 'blocked');
   } finally {
     srv.close();
   }

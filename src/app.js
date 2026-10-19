@@ -20,10 +20,10 @@ function enrichAsync(db, ojitoId, url) {
       if (p.ok && (p.title || p.image_url)) {
         const cur = await db.prepare('SELECT title, image_url FROM ojitos WHERE id = ?').get(ojitoId);
         if (!cur) return;
-        await db.prepare('UPDATE ojitos SET title = COALESCE(NULLIF(title,\'\'), ?), image_url = COALESCE(image_url, ?), preview_status = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\') WHERE id = ?')
+        await db.prepare('UPDATE ojitos SET title = COALESCE(NULLIF(title,\'\'), ?), image_url = COALESCE(image_url, ?), preview_status = ?, preview_reason = NULL, updated_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\') WHERE id = ?')
           .run(p.title || null, p.image_url || null, 'ok', ojitoId);
       } else {
-        await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END WHERE id = ? AND preview_status = 'pending'").run(ojitoId);
+        await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END, preview_reason = ? WHERE id = ? AND preview_status = 'pending'").run(p.ok ? null : (p.reason || 'unknown'), ojitoId);
       }
     } catch {
       // best-effort: ignorar
@@ -229,13 +229,13 @@ function createApp(db) {
   });
 
   app.post('/api/ojitos/:id/retry-preview', auth, loadOjito, async (req, res) => {
-    await db.prepare("UPDATE ojitos SET preview_status = 'pending' WHERE id = ?").run(req.ojito.id);
+    await db.prepare("UPDATE ojitos SET preview_status = 'pending', preview_reason = NULL WHERE id = ?").run(req.ojito.id);
     const p = await fetchPreview(req.ojito.normalized_url);
     if (p.ok && (p.title || p.image_url)) {
-      await db.prepare('UPDATE ojitos SET title = COALESCE(title, ?), image_url = COALESCE(image_url, ?), preview_status = ? WHERE id = ?')
+      await db.prepare('UPDATE ojitos SET title = COALESCE(title, ?), image_url = COALESCE(image_url, ?), preview_status = ?, preview_reason = NULL WHERE id = ?')
         .run(p.title, p.image_url, 'ok', req.ojito.id);
     } else {
-      await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END WHERE id = ?").run(req.ojito.id);
+      await db.prepare("UPDATE ojitos SET preview_status = CASE WHEN image_url IS NULL THEN 'unavailable' ELSE 'ok' END, preview_reason = ? WHERE id = ?").run(p.ok ? null : (p.reason || 'unknown'), req.ojito.id);
     }
     res.json(await db.prepare('SELECT * FROM ojitos WHERE id = ?').get(req.ojito.id));
   });

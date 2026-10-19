@@ -1,7 +1,8 @@
 // Fetcher best-effort: titulo + imagen via OpenGraph. Nunca lanza para no bloquear el guardado.
-const MAX_BYTES = 500 * 1024;
+const SEARCH_WINDOW_BYTES = 1024 * 1024; // ventana de busqueda: las metas viven al inicio
 const TIMEOUT_MS = 6000;
 const MAX_REDIRECTS = 3;
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
 function isPublicHttp(url) {
   try {
@@ -123,11 +124,18 @@ function pickImgFallback(html) {
   return first ? first.slice(0, 500) : null;
 }
 
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
+    .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'");
+}
+
 function pickTitle(html) {
   const og = pickMeta(html, 'og:title');
-  if (og) return og;
+  if (og) return decodeEntities(og);
   const m = html.match(/<title[^>]*>([^<]{1,300})<\/title>/i);
-  return m ? m[1].trim() : null;
+  return m ? decodeEntities(m[1].trim()) : null;
 }
 
 function pickImage(html, baseUrl) {
@@ -147,6 +155,42 @@ function pickImage(html, baseUrl) {
   return null;
 }
 
+async function readHead(res, baseUrl) {
+  // Lee el cuerpo por tramos y corta en cuanto hay titulo+imagen o se agota la ventana.
+  // Devuelve { html, complete }: complete=false si se corto por ventana.
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    const buf = Buffer.from(await res.arrayBuffer());
+    const complete = buf.length <= SEARCH_WINDOW_BYTES;
+    return { html: buf.toString('utf8').slice(0, SEARCH_WINDOW_BYTES), complete };
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder('utf-8');
+  let html = '';
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        html += dec.decode();
+        return { html, complete: true };
+      }
+      bytes += value.byteLength;
+      html += dec.decode(value, { stream: true });
+      if (pickTitle(html) && pickImage(html, baseUrl)) {
+        await reader.cancel().catch(() => {});
+        return { html, complete: true };
+      }
+      if (bytes >= SEARCH_WINDOW_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { html, complete: false };
+      }
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    throw err;
+  }
+}
+
 async function fetchPreview(rawUrl) {
   if (!isPublicHttp(rawUrl)) return { ok: false, reason: 'blocked' };
   const controller = new AbortController();
@@ -158,7 +202,7 @@ async function fetchPreview(rawUrl) {
       const res = await fetch(current, {
         signal: controller.signal,
         redirect: 'manual',
-        headers: { 'user-agent': 'OjitoBot/1.0 (+https://ojito.app)', accept: 'text/html' },
+        headers: { 'user-agent': USER_AGENT, accept: 'text/html' },
       });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get('location');
@@ -168,9 +212,11 @@ async function fetchPreview(rawUrl) {
         continue;
       }
       if (!res.ok) return { ok: false, reason: `http-${res.status}` };
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > MAX_BYTES) return { ok: false, reason: 'too-large' };
-      html = buf.toString('utf8');
+      const { html: head, complete } = await readHead(res, current);
+      html = head;
+      if (!complete && !pickTitle(html) && !pickImage(html, current)) {
+        return { ok: false, reason: 'too-large' };
+      }
       break;
     }
     if (!html) return { ok: false, reason: 'empty' };

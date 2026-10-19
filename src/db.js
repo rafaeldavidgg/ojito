@@ -43,6 +43,7 @@ const SCHEMA_SQL = `
       note TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       preview_status TEXT NOT NULL DEFAULT 'pending',
+      preview_reason TEXT,
       added_by TEXT NOT NULL REFERENCES users(id),
       purchased_at TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -150,9 +151,19 @@ function openDb(dbPath = DB_PATH) {
 async function migrate(db) {
   if (db && db._turso) {
     await db.exec(SCHEMA_SQL);
+    try {
+      await db._client.execute('ALTER TABLE ojitos ADD COLUMN preview_reason TEXT');
+    } catch (e) {
+      if (!/duplicate|already exists/i.test(e && e.message ? e.message : '')) throw e;
+    }
     return;
   }
   db.exec(SCHEMA_SQL);
+  try {
+    db.exec('ALTER TABLE ojitos ADD COLUMN preview_reason TEXT');
+  } catch (e) {
+    if (!/duplicate/i.test(e && e.message ? e.message : '')) throw e;
+  }
 }
 
 module.exports = { openDb, migrate, DB_PATH, SCHEMA_SQL };
