@@ -150,7 +150,7 @@ preview bloqueada sin impedir el guardado.
 
 Misma API, sin dominio comprado. Render duerme tras 15 min sin trafico
 (primera peticion ~60s), la URL `*.onrender.com` y los datos en Turso no se pierden.
-URL actual: `https://ojito-ekor.onrender.com/`. Dominio final previsto: `https://ojito.is-a.dev` (pendiente de merge en `is-a-dev/register`).
+URL publica: `https://ojito.is-my.app/` (dominio `is-my.app` via CNAME a `https://ojito-ekor.onrender.com/`, que sigue funcionando como URL tecnica).
 
 1. Crea DB y token en Turso, copia `TURSO_DATABASE_URL` (`libsql://...`) y `TURSO_AUTH_TOKEN`.
 2. Migra una vez contra Turso desde local:
@@ -173,12 +173,11 @@ curl -X POST $URL/api/register -H "content-type: application/json" -d '{"email":
 5. Persistencia: crea lista+ojito, reinicia el servicio en Render, `GET /api/lists` debe devolver lo mismo.
 6. Rollback: quita `TURSO_*` y vuelve a `OJITO_DB` local sin redeploy de codigo.
 
-### Dominio personalizado (pendiente)
+### Dominio personalizado (activo)
 
-PR abierto en `is-a-dev/register` para `ojito.is-a.dev` (`domains/ojito.json` con `CNAME` a `ojito-ekor.onrender.com`). Cuando hagan merge:
-1. Render → servicio → Settings → Custom Domains → anade `ojito.is-a.dev`.
-2. Espera propagacion DNS (minutos a 2h) y prueba `https://ojito.is-a.dev` en incognito.
-3. Sin cambios de codigo: el frontend usa rutas relativas y el backend no valida `Host`. Solo hay que entrar de nuevo (el `localStorage` no se traslada entre dominios) y reinstalar la PWA si se usaba instalada.
+`ojito.is-my.app` via PR mergeado en `jn-aman/is-my.app` (`domains/ojito.json` con `CNAME` a `ojito-ekor.onrender.com`), dado de alta en Render → Settings → Custom Domains con TLS de Render. Verificado con `nslookup` y smoke en `https://ojito.is-my.app/` (login, `GET /api/lists`, `GET /api/lists/:id/ojitos`).
+
+Notas: sin cambios de codigo (frontend con rutas relativas, backend sin validar `Host`). Al cambiar de dominio hay que entrar de nuevo (el `localStorage` no se traslada) y reinstalar la PWA si se usaba instalada.
 
 Docker local (requiere Docker instalado):
 ```sh
@@ -191,7 +190,7 @@ docker run -p 3000:3000 -e TURSO_DATABASE_URL="..." -e TURSO_AUTH_TOKEN="..." oj
 - [ ] Compartir listas (roles `editor`/`viewer`, invitaciones) — sin migración, ver modelo.
 - [ ] Detección de precio y alertas de bajadas.
 - [ ] Mejoras PWA (offline, notificaciones).
-- [ ] Despliegue documentado (Docker / servicio gestionado).
+- [x] Despliegue documentado (Docker / servicio gestionado).
 
 ## Contribuir
 
