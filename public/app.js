@@ -67,25 +67,14 @@ async function loadDetail() {
     const d = document.createElement('article');
     d.className = 'tile';
     const title = o.title || 'Ojito sin título';
-    const needsImage = !o.image_url && o.preview_status === 'unavailable';
+    const noPreview = !o.image_url && o.preview_status === 'unavailable';
     const media = o.image_url
       ? `<img src="${escapeAttr(o.image_url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" sizes="(max-width: 480px) 100vw, (max-width: 1100px) 50vw, 33vw">`
-      : `<div class="noimg">${needsImage ? 'Sin preview automática — pega la URL de la imagen' : o.preview_status === 'unavailable' ? 'Sin preview — edítalo a mano' : 'Buscando preview…'}</div>`;
+      : `<div class="noimg">${noPreview ? 'Sin preview — usa Editar para añadir la imagen' : o.preview_status === 'unavailable' ? 'Sin preview — edítalo a mano' : 'Buscando preview…'}</div>`;
     d.innerHTML = `${media}<div class="body"><span class="store">${escapeHtml(o.store || 'link')}</span><h4>${escapeHtml(title)}</h4>
       <a class="url" href="${escapeAttr(o.url)}" target="_blank" rel="noopener">${escapeHtml(shortUrl(o.url))}</a>
       ${o.note ? `<p class="note">${escapeHtml(o.note)}</p>` : ''}
-      ${needsImage ? `<form class="imgform" novalidate>
-        <label>URL de la imagen<input class="imginput" inputmode="url" autocomplete="url" placeholder="https://…" aria-label="URL de la imagen"></label>
-        <p class="hint">En la tienda: mantén la foto → Copiar enlace de imagen → pégalo aquí.</p>
-        <div class="imgpreview" hidden></div>
-        <p class="imgerror error" role="alert" aria-live="polite" hidden></p>
-        <div class="imgrow">
-          <button type="button" class="btn ghost small paste">Pegar</button>
-          <button type="submit" class="btn primary small save">Guardar imagen</button>
-        </div>
-      </form>` : ''}
       <div class="actions"></div></div>`;
-    if (needsImage) wireImgForm(d.querySelector('.imgform'), o);
     const acts = d.querySelector('.actions');
     const toggle = document.createElement('button');
     toggle.className = 'linklike';
@@ -103,48 +92,6 @@ async function loadDetail() {
     acts.append(toggle, edit, retry, del);
     grid.appendChild(d);
   }
-}
-
-function wireImgForm(form, o) {
-  if (!form) return;
-  const input = form.querySelector('.imginput');
-  const preview = form.querySelector('.imgpreview');
-  const error = form.querySelector('.imgerror');
-  const showPreview = () => {
-    const v = input.value.trim();
-    error.hidden = true;
-    preview.hidden = true;
-    preview.innerHTML = '';
-    if (!v) return;
-    if (!isHttpImageUrl(v)) {
-      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
-      error.hidden = false;
-      return;
-    }
-    preview.innerHTML = `<img src="${escapeAttr(v)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
-    preview.hidden = false;
-  };
-  input.addEventListener('input', showPreview);
-  form.querySelector('.paste').onclick = async () => {
-    try {
-      const t = await navigator.clipboard.readText();
-      if (t) { input.value = t.trim(); showPreview(); return; }
-    } catch { /* sin permiso: foco manual */ }
-    input.focus();
-  };
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const v = input.value.trim();
-    if (!isHttpImageUrl(v)) {
-      error.textContent = 'Pega una URL de imagen http(s), p. ej. https://…/foto.jpg';
-      error.hidden = false;
-      return;
-    }
-    try {
-      await req('PATCH', `/api/ojitos/${o.id}`, { image_url: v });
-      loadDetail();
-    } catch (err) { error.textContent = err.message; error.hidden = false; }
-  });
 }
 
 function openEditSheet(o) {

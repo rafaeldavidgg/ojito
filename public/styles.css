@@ -264,14 +264,8 @@ input:disabled { background: var(--paper); color: var(--muted); }
 }
 .linklike:hover { text-decoration: underline; }
 .purchased-mark { font-size: 13px; color: var(--muted); }
-.imgform { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; min-width: 0; }
-.imgform label { margin: 0; }
-.imgform .imginput { width: 100%; max-width: 100%; }
 .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; line-height: 1.5; }
 .imgpreview img { width: 100%; display: block; border-radius: 12px; margin-top: 8px; aspect-ratio: 4/3; object-fit: cover; background: var(--blush); }
-.imgform .imgerror { margin: 6px 0 0; }
-.imgrow { display: flex; gap: 8px; margin-top: 8px; }
-.imgrow .btn { flex: 1; }
 .sheet-backdrop { position: fixed; inset: 0; background: rgba(36, 26, 23, 0.45); display: grid; align-items: end; justify-items: stretch; z-index: 40; padding: 0; }
 .sheet { background: var(--card); border: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); width: 100%; max-width: 560px; margin: 0 auto; max-height: 88dvh; overflow: auto; }
 .sheet h3 { margin: 0 0 4px; font-size: 20px; }
